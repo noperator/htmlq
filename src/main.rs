@@ -12,6 +12,7 @@ use kuchiki::traits::*;
 use kuchiki::ElementData;
 use kuchiki::NodeDataRef;
 use kuchiki::NodeRef;
+use regex::Regex;
 use std::error::Error;
 use std::fs::File;
 use std::io;
@@ -21,6 +22,7 @@ use url::Url;
 
 #[derive(Debug, Clone)]
 struct Config {
+    contains: String,
     input_path: String,
     output_path: String,
     selector: String,
@@ -51,6 +53,7 @@ impl Config {
         let base = matches.value_of("base").map(|b| b.to_owned());
 
         Some(Config {
+            contains: String::from(matches.value_of("contains").unwrap_or("")),
             input_path: String::from(matches.value_of("filename").unwrap_or("-")),
             output_path: String::from(matches.value_of("output").unwrap_or("-")),
             base,
@@ -68,6 +71,7 @@ impl Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
+            contains: "".to_string(),
             input_path: "-".to_string(),
             output_path: "-".to_string(),
             selector: "html".to_string(),
@@ -165,6 +169,13 @@ fn get_config<'a, 'b>() -> App<'a, 'b> {
                 .help("Use this URL as the base for links"),
         )
         .arg(
+            Arg::with_name("contains")
+                .short("c")
+                .long("contains")
+                .takes_value(true)
+                .help("Return only selected elements whose whose text nodes match this regular expression"),
+        )
+        .arg(
             Arg::with_name("detect_base")
                 .short("B")
                 .long("detect-base")
@@ -248,6 +259,14 @@ fn main() -> Result<(), Box<dyn Error>> {
         .expect("Failed to parse CSS selector")
     {
         let node = css_match.as_node();
+
+        if config.contains != "" {
+            let regex = Regex::new(&config.contains).unwrap();
+            let content = serialize_text(node, config.ignore_whitespace);
+            if !regex.is_match(&content) {
+                continue;
+            }
+        }
 
         if let Some(attributes) = &config.attributes {
             select_attributes(node, attributes, &mut output);
